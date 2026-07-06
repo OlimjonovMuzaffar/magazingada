@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Magazin Ombori - Sinov Versiyasi</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        body { background: #f7f9fc; padding: 12px; color: #2d3748; -webkit-tap-highlight-color: transparent; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        
+        h1 { font-size: 22px; margin: 15px 0; text-align: center; color: #1a202c; font-weight: 700; }
+        
+        /* Qidiruv joyi */
+        .search-box { background: white; padding: 12px; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); margin-bottom: 16px; }
+        .search-input { width: 100%; padding: 14px; border: 1.5px solid #e2e8f0; border-radius: 12px; font-size: 16px; outline: none; background: #f8fafc; transition: all 0.2s; }
+        .search-input:focus { border-color: #3182ce; background: white; box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.1); }
+        
+        /* Telefonda suriladigan Bo'limlar menyusi */
+        .categories-wrapper { margin: 0 -12px 20px -12px; padding: 0 12px; overflow-x: auto; display: flex; scrollbar-width: none; }
+        .categories-wrapper::-webkit-scrollbar { display: none; }
+        
+        .categories { display: flex; gap: 8px; padding-bottom: 5px; white-space: nowrap; }
+        .cat-btn { padding: 10px 16px; border: none; background: white; border-radius: 25px; cursor: pointer; font-weight: 600; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.03); border: 1px solid #e2e8f0; transition: all 0.2s; }
+        .cat-btn.active { background: #3182ce; color: white; border-color: #3182ce; }
+
+        /* Mahsulotlar Griddi */
+        .products-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+        @media (min-width: 768px) { .products-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; } }
+        
+        /* Kartochka dizayni */
+        .card { background: white; border-radius: 16px; padding: 14px; box-shadow: 0 4px 6px rgba(0,0,0,0.02); border: 1px solid #edf2f7; position: relative; display: flex; flex-direction: column; justify-content: space-between; min-height: 130px; transition: transform 0.2s; }
+        .card:active { transform: scale(0.97); }
+        
+        /* Bor / Yo'q holati uchun xira qilish */
+        .card.status-yoq { opacity: 0.6; background: #f1f5f9; }
+        
+        .card-top { display: flex; flex-direction: column; gap: 4px; }
+        .category-tag { font-size: 11px; color: #718096; text-transform: uppercase; letter-spacing: 0.5px; }
+        .card h3 { font-size: 15px; font-weight: 600; color: #1a202c; line-height: 1.3; margin-top: 2px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        
+        .card-bottom { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
+        .card .price { font-size: 14px; font-weight: 700; color: #2d3748; }
+        
+        /* Status badge */
+        .status-badge { font-size: 11px; padding: 4px 8px; border-radius: 8px; font-weight: 600; }
+        .status-bor .status-badge { background: #e6fffa; color: #047481; }
+        .status-yoq .status-badge { background: #fff5f5; color: #9b2c2c; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>📦 Magazin  (Sinov)</h1>
+
+    <!-- Qidiruv paneli -->
+    <div class="search-box">
+        <input type="text" id="search" class="search-input" placeholder="Mahsulot nomini yozing...">
+    </div>
+
+    <!-- 3 ta bo'limlar -->
+    <div class="categories-wrapper">
+        <div class="categories">
+            <button class="cat-btn active" onclick="filtrlaBolim('all', this)">Hamma mahsulotlar</button>
+            <button class="cat-btn" onclick="filtrlaBolim('suv', this)">💧 Suvlar</button>
+            <button class="cat-btn" onclick="filtrlaBolim('choy', this)">🍵 Choylar</button>
+            <button class="cat-btn" onclick="filtrlaBolim('parashok', this)">🧼 Parashoklar</button>
+        </div>
+    </div>
+
+    <!-- Mahsulotlar ro'yxati -->
+    <div class="products-grid" id="products-list"></div>
+</div>
+
+<script>
+    // Maxsulotlar ro'yxati bazasi
+    const mahsulotlar = [
+        // 1. Suvlar bo'limi
+        { nom: "Coca-Cola 1.5L", narx: "12,000", bolim: "suv", bolimNomi: "💧 Suvlar", bor: true },
+        { nom: "Pepsi 1L", narx: "9,000", bolim: "suv", bolimNomi: "💧 Suvlar", bor: true },
+        { nom: "Fanta 1.5L", narx: "12,000", bolim: "suv", bolimNomi: "💧 Suvlar", bor: true },
+        { nom: "Asu gazsiz 1L", narx: "5,000", bolim: "suv", bolimNomi: "💧 Suvlar", bor: false },
+
+        // 2. Choylar bo'limi
+        { nom: "Rizq.", narx: "18,000", bolim: "choy", bolimNomi: "🍵 Choylar", bor: true },
+        { nom: "Zamin Premium", narx: "32,000", bolim: "choy", bolimNomi: "🍵 Choylar", bor: false },
+        { nom: "95-choy (ko'k)", narx: "7,000", bolim: "choy", bolimNomi: "🍵 Choylar", bor: true },
+        { nom: "Tess", narx: "17,000", bolim: "choy", bolimNomi: "🍵 Choylar", bor: true },
+
+        // 3. Parashoklar bo'limi
+        { nom: "Marta", narx: "15,000", bolim: "parashok", bolimNomi: "🧼 Parashoklar", bor: true },
+        { nom: "Aprel", narx: "15,000", bolim: "parashok", bolimNomi: "🧼 Parashoklar", bor: true },
+        { nom: "Delfin", narx: "10,000", bolim: "parashok", bolimNomi: "🧼 Parashoklar", bor: false },
+        { nom: "Sovun", narx: "5,000", bolim: "parashok", bolimNomi: "🧼 Parashoklar", bor: false }
+    ];
+
+    let joriyBolim = 'all';
+    let qidiruvMatni = '';
+
+    function vizualizatsiyaYasa() {
+        const grid = document.getElementById('products-list');
+        grid.innerHTML = '';
+
+        const elangan = mahsulotlar.filter(p => {
+            const bolimMos = joriyBolim === 'all' || p.bolim === joriyBolim;
+            const qidiruvMos = p.nom.toLowerCase().includes(qidiruvMatni.toLowerCase());
+            return bolimMos && qidiruvMos;
+        });
+
+        elangan.forEach(p => {
+            const card = document.createElement('div');
+            card.className = `card ${p.bor ? 'status-bor' : 'status-yoq'}`;
+            
+            card.innerHTML = `
+                <div class="card-top">
+                    <span class="category-tag">${p.bolimNomi}</span>
+                    <h3>${p.nom}</h3>
+                </div>
+                <div class="card-bottom">
+                    <span class="price">${p.narx} so'm</span>
+                    <span class="status-badge">${p.bor ? 'Bor' : 'Yo\'q'}</span>
+                </div>
+            `;
+            grid.appendChild(card);
+        });
+    }
+
+    function filtrlaBolim(bolimNomi, tugma) {
+        joriyBolim = bolimNomi;
+        document.querySelectorAll('.cat-btn').forEach(btn => btn.classList.remove('active'));
+        tugma.classList.add('active');
+        vizualizatsiyaYasa();
+    }
+
+    document.getElementById('search').addEventListener('input', (e) => {
+        qidiruvMatni = e.target.value;
+        vizualizatsiyaYasa();
+    });
+
+    vizualizatsiyaYasa();
+</script>
+
+</body>
+</html>
