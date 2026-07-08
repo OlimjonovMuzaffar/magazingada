@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Ombor Boshqaruv Tizimi</title>
+    <title>Ombor Boshqaruv Tizimi (Onlayn)</title>
     <style>
         :root {
             --bg-color: #0f172a;
@@ -53,15 +53,15 @@
             margin-bottom: 12px;
         }
 
-        .clear-btn {
-            background: rgba(248, 113, 113, 0.1);
-            border: 1px solid var(--danger-color);
-            color: var(--danger-color);
+        .admin-badge {
+            background: rgba(56, 189, 248, 0.1);
+            border: 1px solid var(--accent-color);
+            color: var(--accent-color);
             padding: 6px 12px;
             border-radius: 20px;
             font-size: 11px;
-            font-weight: 600;
-            cursor: pointer;
+            font-weight: 700;
+            display: none;
         }
 
         .theme-btn {
@@ -95,6 +95,43 @@
             font-size: 15px; 
             font-weight: 700; 
             border: 1px solid rgba(74, 222, 128, 0.2);
+        }
+
+        .search-container {
+            position: relative;
+            margin-bottom: 16px;
+            width: 100%;
+        }
+        .search-input {
+            width: 100%;
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            padding: 14px 40px 14px 44px;
+            border-radius: 12px;
+            font-size: 16px;
+            outline: none;
+        }
+        .search-icon {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            font-size: 16px;
+            pointer-events: none;
+        }
+        .search-clear {
+            position: absolute;
+            right: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 16px;
+            display: none;
         }
         
         .categories-menu { 
@@ -145,7 +182,6 @@
             width: 100%; 
             font-size: 15px;
             outline: none;
-            -webkit-appearance: none;
         }
         
         .file-input-wrapper {
@@ -174,6 +210,13 @@
             cursor: pointer; 
             font-weight: 700;
             font-size: 15px;
+        }
+
+        .loading-text {
+            text-align: center;
+            padding: 20px;
+            color: var(--text-muted);
+            font-style: italic;
         }
 
         .table-container { background: transparent; margin-bottom: 24px; }
@@ -211,6 +254,8 @@
                 border-top: 1px dashed var(--border-color);
                 margin-top: 6px;
             }
+            .delete-col { display: none; }
+            body.is-admin .delete-col { display: flex; }
         }
 
         @media (min-width: 768px) {
@@ -222,6 +267,9 @@
             th { background-color: rgba(15, 23, 42, 0.2); color: var(--text-muted); font-size: 13px; text-transform: uppercase; }
             .form-group { flex-direction: row; }
             .form-group input, .file-input-wrapper { flex: 1; }
+            
+            .delete-col { display: none; }
+            body.is-admin .delete-col { display: table-cell; }
         }
         
         .product-flex { display: flex; align-items: center; gap: 12px; }
@@ -237,12 +285,15 @@
 
         footer { margin-top: auto; text-align: center; padding: 20px 0; color: var(--text-muted); font-size: 13px; border-top: 1px solid var(--border-color); }
         footer strong { color: var(--accent-color); }
+        
+        .admin-login-link { color: var(--text-muted); text-decoration: none; cursor: pointer; font-size: 12px; margin-left: 5px; }
+        .admin-login-link:hover { color: var(--accent-color); }
     </style>
 </head>
 <body>
 
     <div class="top-bar">
-        <button class="clear-btn" onclick="clearOldCache()">⚠️ Bazani Tozalash</button>
+        <div id="admin-indicator" class="admin-badge">⚡ ADMIN REJIM</div>
         <button class="theme-btn" onclick="toggleTheme()">☀️ Light Mode</button>
     </div>
 
@@ -250,6 +301,12 @@
         <h1>🏪 Do'kon "Ombor" Tizimi</h1>
         <div class="balance-card">💰 Umumiy Qiymat: <span id="total-shop-balance">0</span> so'm</div>
     </header>
+
+    <div class="search-container">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="search-box" class="search-input" placeholder="Mahsulot nomini yozing..." oninput="handleSearch()">
+        <button id="search-clear-btn" class="search-clear" onclick="clearSearch()">❌</button>
+    </div>
 
     <div class="categories-menu" id="categories-list">
         <button class="category-btn active" onclick="filterCategory('all', event)">🔥 Hammasi</button>
@@ -284,31 +341,106 @@
     </div>
 
     <div class="table-container">
+        <div id="loading-indicator" class="loading-text">🔄 Internetdan ma'lumotlar yuklanmoqda...</div>
         <table>
             <tbody id="products-table-body"></tbody>
         </table>
     </div>
 
-    <footer>Created by <strong>@old_crt</strong></footer>
+    <footer>Created by <strong>@old_crt</strong> | <span class="admin-login-link" onclick="askAdminPassword()">Tizimga kirish</span></footer>
 
     <script>
-        let mahsulotlar = JSON.parse(localStorage.getItem('ombor_mahsulotlar')) || [];
+        const FIREBASE_URL = "https://meningomborim-5277b-default-rtdb.firebaseio.com"; 
+        
+        // 🔐 Parolingiz xavfsiz hash holatida ("0571")
+        const HASHED_KEY = "b29be11efc77cfc2b71fa0747805cb022e379b1836ebfe5b9cf43f3b46944e27";
+
+        let mahsulotlar = [];
         let joriyBolim = 'all';
         let joriyRasmBase64 = "";
+        let qidiruvMatni = "";
+        let isAdmin = false;
 
-        function clearOldCache() {
-            if(confirm("Xotirani butunlay tozalab yuborishni xohlaysizmi?")) {
-                localStorage.removeItem('ombor_mahsulotlar');
-                mahsulotlar = [];
-                renderTable();
-                hisoblangUmumiyBalans();
+        async function hashPassword(string) {
+            const utf8 = new TextEncoder().encode(string);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', utf8);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        function checkAdminStatus() {
+            if (localStorage.getItem('ombor_admin') === 'true') {
+                isAdmin = true;
+                document.body.classList.add('is-admin');
+                document.getElementById('admin-indicator').style.display = 'block';
+            } else {
+                isAdmin = false;
+                document.body.classList.remove('is-admin');
+                document.getElementById('admin-indicator').style.display = 'none';
             }
+        }
+
+        async function askAdminPassword() {
+            if (isAdmin) {
+                if (confirm("Admin rejimidan chiqmoqchimisiz?")) {
+                    localStorage.removeItem('ombor_admin');
+                    checkAdminStatus();
+                    filterCategory(joriyBolim);
+                }
+                return;
+            }
+            
+            const parol = prompt("Maxfiy parolni kiriting:");
+            if (parol !== null) {
+                const inputHash = await hashPassword(parol);
+                if (inputHash === HASHED_KEY) {
+                    localStorage.setItem('ombor_admin', 'true');
+                    checkAdminStatus();
+                    filterCategory(joriyBolim);
+                    alert("Siz muvaffaqiyatli tanindingiz! Endi tovar qo'sha olasiz.");
+                } else {
+                    alert("Noto'g'ri parol kiritildi!");
+                }
+            }
+        }
+
+        function loadProductsFromFirebase() {
+            fetch(`${FIREBASE_URL}/mahsulotlar.json`)
+                .then(res => res.json())
+                .then(data => {
+                    mahsulotlar = [];
+                    if (data) {
+                        Object.keys(data).forEach(key => {
+                            mahsulotlar.push({ firebaseId: key, ...data[key] });
+                        });
+                    }
+                    document.getElementById('loading-indicator').style.display = 'none';
+                    renderTable();
+                    hisoblangUmumiyBalans();
+                })
+                .catch(err => {
+                    document.getElementById('loading-indicator').innerText = "❌ Internetga ulanishda xatolik!";
+                });
+        }
+
+        function handleSearch() {
+            const searchBox = document.getElementById('search-box');
+            const clearBtn = document.getElementById('search-clear-btn');
+            qidiruvMatni = searchBox.value.toLowerCase().trim();
+            clearBtn.style.display = qidiruvMatni.length > 0 ? 'block' : 'none';
+            renderTable();
+        }
+
+        function clearSearch() {
+            document.getElementById('search-box').value = "";
+            document.getElementById('search-clear-btn').style.display = 'none';
+            qidiruvMatni = "";
+            renderTable();
         }
 
         function processAndCompressImage() {
             const file = document.getElementById('p-image').files[0];
             if (!file) return;
-
             document.getElementById('file-label').innerText = "⚡...";
 
             const reader = new FileReader();
@@ -322,7 +454,6 @@
                     canvas.height = 44;
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, 44, 44);
-                    
                     joriyRasmBase64 = canvas.toDataURL('image/jpeg', 0.5);
                     document.getElementById('file-label').innerText = "✅ Tayyor";
                 };
@@ -340,14 +471,20 @@
             }
         }
 
-        function saveToLocalStorage() {
-            localStorage.setItem('ombor_mahsulotlar', JSON.stringify(mahsulotlar));
-        }
-
         function renderTable() {
             const tbody = document.getElementById('products-table-body');
             tbody.innerHTML = '';
-            const elangan = mahsulotlar.filter(p => joriyBolim === 'all' || p.bolim === joriyBolim);
+            
+            const elangan = mahsulotlar.filter(p => {
+                const bolimTo'g'ri = (joriyBolim === 'all' || p.bolim === joriyBolim);
+                const qidiruvTo'g'ri = p.nomi.toLowerCase().includes(qidiruvMatni);
+                return bolimTo'g'ri && qidiruvTo'g'ri;
+            });
+
+            if(elangan.length === 0 && mahsulotlar.length > 0) {
+                tbody.innerHTML = '<tr><td style="text-align:center;color:var(--text-muted);padding:20px;">Mahsulot topilmadi</td></tr>';
+                return;
+            }
 
             elangan.forEach(p => {
                 const jami = p.narxi * p.soni;
@@ -368,7 +505,7 @@
                         <td>${p.narxi.toLocaleString()} so'm</td>
                         <td><strong>${jami.toLocaleString()} so'm</strong></td>
                         <td>${status}</td>
-                        <td><button class="delete-btn" onclick="deleteProduct(${p.id})">❌</button></td>
+                        <td class="delete-col"><button class="delete-btn" onclick="deleteProduct('${p.firebaseId}')">❌</button></td>
                     </tr>
                 `;
             });
@@ -386,7 +523,7 @@
             if (event) event.currentTarget.classList.add('active');
 
             const addPanel = document.getElementById('add-panel');
-            if(bolimNomi === 'all') {
+            if(bolimNomi === 'all' || !isAdmin) {
                 addPanel.classList.remove('show');
             } else {
                 addPanel.classList.add('show');
@@ -396,40 +533,49 @@
         }
 
         function addNewProduct() {
+            if(!isAdmin) return alert("Sizda tovar qo'shish huquqi yo'q!");
+            
             const nomi = document.getElementById('p-name').value;
             const narxi = parseFloat(document.getElementById('p-price').value);
             const soni = parseFloat(document.getElementById('p-qty').value);
 
             if(!nomi || isNaN(narxi) || isNaN(soni)) return alert("Ma'lumot to'liq emas!");
 
-            mahsulotlar.push({ id: Date.now(), nomi, bolim: joriyBolim, narxi, soni, rasm: joriyRasmBase64 });
-            saveToLocalStorage();
+            const yangiMahsulot = { nomi, bolim: joriyBolim, narxi, soni, rasm: joriyRasmBase64 };
 
-            // INPUT KATAKLARINI TO'LIQ TOZALASH
-            document.getElementById('p-name').value = '';
-            document.getElementById('p-price').value = '';
-            document.getElementById('p-qty').value = '';
-            document.getElementById('p-image').value = '';
-            document.getElementById('file-label').innerText = "📸 Surat yuklash";
-            joriyRasmBase64 = "";
-
-            // TIZIMNI QOTMASDAN ZOOM EFFEKTIDA YANGILASH
-            renderTable();
-            hisoblangUmumiyBalans();
+            fetch(`${FIREBASE_URL}/mahsulotlar.json`, {
+                method: 'POST',
+                body: JSON.stringify(yangiMahsulot)
+            })
+            .then(res => res.json())
+            .then(() => {
+                document.getElementById('p-name').value = '';
+                document.getElementById('p-price').value = '';
+                document.getElementById('p-qty').value = '';
+                document.getElementById('p-image').value = '';
+                document.getElementById('file-label').innerText = "📸 Surat yuklash";
+                joriyRasmBase64 = "";
+                loadProductsFromFirebase();
+            });
         }
 
-        function deleteProduct(id) {
-            if(confirm("O'chirilsinmi?")) {
-                mahsulotlar = mahsulotlar.filter(p => p.id !== id);
-                saveToLocalStorage();
-                renderTable();
-                hisoblangUmumiyBalans();
+        function deleteProduct(firebaseId) {
+            if(!isAdmin) return alert("Sizda tovar o'chirish huquqi yo'q!");
+            
+            if(confirm("Ushbu mahsulot onlayn bazadan butunlay o'chirilsinmi?")) {
+                fetch(`${FIREBASE_URL}/mahsulotlar/${firebaseId}.json`, {
+                    method: 'DELETE'
+                })
+                .then(() => {
+                    loadProductsFromFirebase();
+                });
             }
         }
 
         if (localStorage.getItem('theme') === 'light') document.documentElement.setAttribute('data-theme', 'light');
-        renderTable();
-        hisoblangUmumiyBalans();
+        
+        checkAdminStatus();
+        loadProductsFromFirebase();
     </script>
 </body>
 </html>
